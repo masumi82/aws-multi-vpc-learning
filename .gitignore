@@ -1,0 +1,66 @@
+# ============================================================
+# Terraform
+# ============================================================
+**/.terraform/
+**/terraform.tfstate
+**/terraform.tfstate.backup
+**/terraform.tfstate.*.backup
+**/.terraform.tfstate.lock.info
+
+# tfvars は環境固有 (機微情報を含む可能性) なのでコミットしない
+# *.example はコミット OK
+**/terraform.tfvars
+**/*.auto.tfvars
+!**/*.tfvars.example
+
+# 実行時生成物
+crash.log
+crash.*.log
+tfplan
+*.tfplan
+
+# Override files
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# 注意: .terraform.lock.hcl は **コミット対象**
+# Provider バージョンを固定する目的なので除外しない
+
+# ============================================================
+# Node / Playwright
+# ============================================================
+tests/e2e/node_modules/
+tests/e2e/playwright-report/
+tests/e2e/test-results/
+tests/e2e/.playwright-mcp/
+
+# ============================================================
+# Test evidence (個別 AWS リソース ID を含む。Public リポジトリでは除外)
+# ============================================================
+tests/evidence/
+
+# ============================================================
+# 個人用作業ファイル (Public リポジトリでは除外)
+# ============================================================
+tasks/
+
+# ============================================================
+# Playwright MCP screenshots / snapshots (project root)
+# ============================================================
+/E[0-9]-*.png
+/E[0-9]-*.yml
+/E[0-9]-*.txt
+.playwright-mcp/
+
+# ============================================================
+# OS / Editor
+# ============================================================
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+*~

@@ -1,0 +1,157 @@
+@startuml AWS HA Tier 3 Multi-Region Warm Standby
+title AWS マルチリージョン Warm Standby (Tier 3)\nPrimary: Tokyo / Secondary: Osaka
+
+skinparam shadowing false
+skinparam defaultFontName "Noto Sans JP"
+skinparam roundCorner 10
+skinparam rectangle {
+  BackgroundColor<<region_p>>  #EAF4FC
+  BorderColor<<region_p>>      #1E7CC8
+  FontStyle<<region_p>>        bold
+  BackgroundColor<<region_s>>  #FFF5E5
+  BorderColor<<region_s>>      #E08E00
+  FontStyle<<region_s>>        bold
+  BackgroundColor<<vpc>>       #F7FAFD
+  BorderColor<<vpc>>           #93B7DD
+  BackgroundColor<<edge>>      #F5F5F5
+  BorderColor<<edge>>          #9C27B0
+  BackgroundColor<<az>>        #FAFAFA
+  BorderColor<<az>>            #888888
+}
+skinparam database {
+  BackgroundColor #E8F5E9
+  BorderColor     #2E7D32
+}
+skinparam component {
+  BackgroundColor #FFFFFF
+  BorderColor     #1E7CC8
+}
+skinparam cloud {
+  BackgroundColor #F5F5F5
+  BorderColor     #888888
+}
+
+actor "User\n(Japan)" as user
+
+' =================== Edge Layer (Global) ===================
+rectangle "Edge Layer (Global)" <<edge>> {
+  cloud "Route 53\nFailover Routing\n+ Health Check" as r53
+  component "**CloudFront**\nOrigin Group (failover)\n[Primary: Tokyo ALB]\n[Secondary: Osaka ALB]\n+ WAF (任意)" as cf
+}
+
+' =================== Primary Region (Tokyo) ===================
+rectangle "**ap-northeast-1 (Tokyo)** — Primary 100% traffic" <<region_p>> {
+
+  rectangle "VPC-Prod  10.0.0.0/16  (3 AZ)" <<vpc>> {
+
+    component "ALB-Tokyo\n(Internet-facing)" as alb_t
+    component "NAT GW × 3\n(各 AZ 1 台)" as nat_t
+
+    rectangle "AZ 1a/1c/1d" <<az>> {
+      component "App ECS Fargate\n(Auto Scaling 3-10 task)" as app_t
+    }
+
+    database "Aurora Cluster\n(Writer × 1 + Reader × 3)\nWriter Endpoint 公開" as db_t
+  }
+}
+
+' =================== Secondary Region (Osaka) ===================
+rectangle "**ap-northeast-3 (Osaka)** — Warm Standby 0% traffic (Healthcheck時のみ)" <<region_s>> {
+
+  rectangle "VPC-Prod-Osaka  10.2.0.0/16  (3 AZ)" <<vpc>> {
+
+    component "ALB-Osaka\n(Internet-facing)" as alb_o
+    component "NAT GW × 3" as nat_o
+
+    rectangle "AZ 1a/1b/1c" <<az>> {
+      component "App ECS Fargate\n(常時 1 task / Failover 時に拡張)" as app_o
+    }
+
+    database "Aurora Cluster (Read-Only)\n(Reader × 2)\nGlobal Replica" as db_o
+  }
+}
+
+' =================== Aurora Global Database ===================
+component "**Aurora Global Database**\n  app-global  \n(Cross-Region Replication)" as global_db
+
+' =================== S3 Cross-Region Replication ===================
+database "S3-Tokyo (UI)" as s3_t
+database "S3-Osaka (UI Replica)" as s3_o
+
+' =================== ECR Cross-Region Replication ===================
+component "ECR Tokyo" as ecr_t
+component "ECR Osaka" as ecr_o
+
+' --- 通常時トラフィック ---
+user --> r53 : 1. DNS lookup
+r53 --> cf : 2. ALIAS to CloudFront
+cf --> alb_t : 3. Primary origin\n(healthy)
+alb_t --> app_t
+app_t --> db_t : reads/writes
+
+' --- UI 配信 ---
+cf --> s3_t : Default behavior
+
+' --- Aurora Global Replication ---
+db_t -down-> global_db
+global_db -down-> db_o : Replication\n(~1 sec lag)
+
+' --- S3 Cross-Region Replication ---
+s3_t -right-> s3_o : Cross-Region\nReplication
+
+' --- ECR Replication ---
+ecr_t -right-> ecr_o : Image Replication
+
+' --- フェイルオーバー時 ---
+cf .[#red,bold].> alb_o : **Failover origin**\n(Primary 5xx 時)
+r53 .[#red,bold].> cf : Health Check 失敗時 (60-180秒)\n→ Secondary ALIAS
+
+' --- App から DB ---
+app_o ..> db_o : reads only\n(failover 時に\nwrite 昇格手順)
+
+note right of r53
+  **Route 53**
+  - Health Check: CloudFront target
+  - Failover Routing
+  - Primary: Tokyo (default)
+  - Secondary: Osaka
+end note
+
+note right of global_db
+  **Aurora Global Database**
+  - Write は Primary のみ
+  - Cross-Region Replication < 1 sec
+  - Secondary を Writer 昇格 = detach
+  - RPO: 1-5 秒
+end note
+
+note left of app_o
+  **Warm Standby 戦略**
+  - 常時 1 task で 起動済
+  - Failover 時に desired_count 拡張
+  - Aurora 昇格 runbook を実行
+  - RTO: 15 分以内
+end note
+
+note as N1
+  **コスト追加 (Tier 0 比)**
+  - Osaka Aurora Reader: +$80
+  - Osaka ECS (1 task): +$5
+  - Osaka ALB: +$20
+  - Osaka NAT × 3: +$135
+  - S3 CRR + storage: +$5
+  - Cross-Region Data Transfer: +$30
+  - Route 53 Health Check: +$1
+  - **合計: +$280/月**
+end note
+
+note as N2
+  **障害シナリオと対応**
+  1. AZ 障害 → 即継続 (Multi-AZ Aurora + ASG)
+  2. リージョン障害 → Route 53 が Osaka に切替 (~3 分)
+                       Aurora 昇格 (~5 分)
+                       ECS 拡張 (~5 分)
+                       → 合計 RTO 15 分
+end note
+
+@enduml

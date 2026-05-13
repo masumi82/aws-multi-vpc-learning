@@ -1,0 +1,204 @@
+@startuml AWS Multi-AZ Multi-VPC Architecture
+title AWS マルチAZ / マルチVPC 構成 (Prod/Dev 分離 + S3+CloudFront)\nリージョン: ap-northeast-1 / 3 AZ (1a, 1c, 1d)
+
+skinparam shadowing false
+skinparam defaultFontName "Noto Sans JP"
+skinparam roundCorner 10
+skinparam rectangle {
+  BackgroundColor<<vpcP>>  #EAF4FC
+  BorderColor<<vpcP>>      #1E7CC8
+  FontStyle<<vpcP>>        bold
+  BackgroundColor<<vpcD>>  #FCEAEA
+  BorderColor<<vpcD>>      #C81E1E
+  FontStyle<<vpcD>>        bold
+  BackgroundColor<<az>>    #F7FAFD
+  BorderColor<<az>>        #93B7DD
+  BackgroundColor<<pub>>   #FFF5E5
+  BorderColor<<pub>>       #E08E00
+  BackgroundColor<<priv>>  #F2F2F2
+  BorderColor<<priv>>      #888888
+  BackgroundColor<<db>>    #E8F5E9
+  BorderColor<<db>>        #43A047
+  BackgroundColor<<edge>>  #FFFFFF
+  BorderColor<<edge>>      #9C27B0
+}
+skinparam database {
+  BackgroundColor #E8F5E9
+  BorderColor     #2E7D32
+}
+skinparam component {
+  BackgroundColor #FFFFFF
+  BorderColor     #1E7CC8
+}
+skinparam cloud {
+  BackgroundColor #F5F5F5
+  BorderColor     #888888
+}
+
+actor "User\n(Internet)" as user
+
+' =========== Edge layer (S3 + CloudFront) ===========
+rectangle "Edge Layer (Global)" <<edge>> {
+  cloud "Route 53\napp.example.com / dev.example.com" as r53
+  component "CloudFront-Prod\n(/  → S3-Prod,  /api/*  → ALB-Prod)" as cfP
+  component "CloudFront-Dev\n(/  → S3-Dev,   /api/*  → ALB-Dev)"  as cfD
+  database "S3-Prod\nUI bucket" as s3P
+  database "S3-Dev\nUI bucket"  as s3D
+}
+
+' =========== VPC-Prod ===========
+rectangle "**VPC-Prod**  10.0.0.0/16" <<vpcP>> {
+
+  component "ALB-Prod\n(Internet-facing,\n SG: CloudFront PL only)" as albP
+  component "NAT GW-Prod\n(1a only)" as natP
+  component "IGW-Prod" as igwP
+
+  rectangle "AZ ap-northeast-1a" <<az>> {
+    rectangle "Public 10.0.0.0/24" <<pub>> as pubPa
+    rectangle "App (Private) 10.0.10.0/24" <<priv>> {
+      component "App EC2 (ASG)" as appPa
+    }
+    rectangle "DB (Private) 10.0.20.0/24" <<db>> {
+      database "Aurora Writer" as dbPw
+    }
+  }
+  rectangle "AZ ap-northeast-1c" <<az>> {
+    rectangle "Public 10.0.1.0/24" <<pub>> as pubPc
+    rectangle "App (Private) 10.0.11.0/24" <<priv>> {
+      component "App EC2 (ASG)" as appPc
+    }
+    rectangle "DB (Private) 10.0.21.0/24" <<db>> {
+      database "Aurora Reader 1" as dbPr1
+    }
+  }
+  rectangle "AZ ap-northeast-1d" <<az>> {
+    rectangle "Public 10.0.2.0/24" <<pub>> as pubPd
+    rectangle "App (Private) 10.0.12.0/24" <<priv>> {
+      component "App EC2 (ASG)" as appPd
+    }
+    rectangle "DB (Private) 10.0.22.0/24" <<db>> {
+      database "Aurora Reader 2" as dbPr2
+    }
+  }
+}
+
+' =========== VPC-Dev ===========
+rectangle "**VPC-Dev**  10.1.0.0/16" <<vpcD>> {
+
+  component "ALB-Dev\n(Internet-facing,\n SG: CloudFront PL only)" as albD
+  component "NAT GW-Dev\n(1a only)" as natD
+  component "IGW-Dev" as igwD
+
+  rectangle "AZ ap-northeast-1a " <<az>> {
+    rectangle "Public 10.1.0.0/24" <<pub>> as pubDa
+    rectangle "App (Private) 10.1.10.0/24" <<priv>> {
+      component "App EC2 (ASG)" as appDa
+    }
+    rectangle "DB (Private) 10.1.20.0/24" <<db>> {
+      database "Aurora Writer" as dbDw
+    }
+  }
+  rectangle "AZ ap-northeast-1c " <<az>> {
+    rectangle "Public 10.1.1.0/24" <<pub>> as pubDc
+    rectangle "App (Private) 10.1.11.0/24" <<priv>> {
+      component "App EC2 (ASG)" as appDc
+    }
+    rectangle "DB (Private) 10.1.21.0/24" <<db>> {
+      database "Aurora Reader 1" as dbDr1
+    }
+  }
+  rectangle "AZ ap-northeast-1d " <<az>> {
+    rectangle "Public 10.1.2.0/24" <<pub>> as pubDd
+    rectangle "App (Private) 10.1.12.0/24" <<priv>> {
+      component "App EC2 (ASG)" as appDd
+    }
+    rectangle "DB (Private) 10.1.22.0/24" <<db>> {
+      database "Aurora Reader 2" as dbDr2
+    }
+  }
+}
+
+' --- Ingress (User -> CloudFront -> S3 / ALB) ---
+user --> r53
+r53 --> cfP : app.example.com
+r53 --> cfD : dev.example.com
+
+cfP --> s3P : /  (UI static)
+cfP --> albP : /api/* (origin)
+cfD --> s3D : /  (UI static)
+cfD --> albD : /api/* (origin)
+
+' --- ALB -> App -> Aurora (Prod) ---
+albP --> appPa
+albP --> appPc
+albP --> appPd
+appPa --> dbPw
+appPc --> dbPw
+appPd --> dbPw
+appPa ..> dbPr1 : read
+appPc ..> dbPr1 : read
+appPd ..> dbPr2 : read
+dbPw <..> dbPr1 : replication
+dbPw <..> dbPr2 : replication
+
+' --- ALB -> App -> Aurora (Dev) ---
+albD --> appDa
+albD --> appDc
+albD --> appDd
+appDa --> dbDw
+appDc --> dbDw
+appDd --> dbDw
+appDa ..> dbDr1 : read
+appDc ..> dbDr1 : read
+appDd ..> dbDr2 : read
+dbDw <..> dbDr1 : replication
+dbDw <..> dbDr2 : replication
+
+' --- Egress (App -> NAT -> IGW) ---
+appPa ..> natP
+appPc ..> natP
+appPd ..> natP
+natP --> igwP
+igwP --> user
+
+appDa ..> natD
+appDc ..> natD
+appDd ..> natD
+natD --> igwD
+igwD --> user
+
+note right of cfP
+  **CloudFront**
+  - SPA: 403/404 → /index.html
+  - /api/* は ALB を origin
+  - ACM 証明書は us-east-1
+  - WAF (任意) attach
+end note
+
+note right of dbPw
+  **Aurora Cluster (Prod / Dev 各)**
+  - 3 AZ DB Subnet Group
+  - Writer 障害時に自動 Failover
+  - Cluster / Writer / Reader Endpoint
+end note
+
+note right of natP
+  **NAT GW は 1a のみ (学習用)**
+  - 1a 障害時は App の外向き通信が全断 (SPOF)
+  - 検証完了次第、削除すること (時間課金)
+end note
+
+note as N1
+  **Prod / Dev は完全分離** (VPC Peering なし)
+  - SG / IAM / 鍵 / 証明書 もすべて環境別
+  - データは Dev → Prod に流さない (リーク防止)
+end note
+
+note as N2
+  **検証後の削除順**
+  CloudFront → ALB → NAT GW (+EIP)
+   → Aurora → ASG/EC2 → S3 → VPC → ACM
+  詳細は docs/cleanup-checklist.md
+end note
+
+@enduml

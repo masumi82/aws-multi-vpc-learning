@@ -1,0 +1,15 @@
+# envs/prod 用 tfvars (任意で上書き)。
+# このファイルを `terraform.tfvars` にコピーして編集。
+# tfvars 自体は .gitignore で除外、example はコミット OK。
+
+region   = "ap-northeast-1"
+vpc_cidr = "10.0.0.0/16"
+
+# ⚠️ apply 前に describe-db-engine-versions で最新のサポート版に更新すること
+# aurora_engine_version = "15.10"
+
+# aurora_instance_class = "db.t4g.medium"
+# aurora_reader_count   = 2
+# ecs_desired_count     = 2
+# ecs_cpu               = 256
+# ecs_memory            = 512
