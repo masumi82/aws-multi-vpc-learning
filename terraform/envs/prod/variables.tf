@@ -86,3 +86,31 @@ variable "alert_email" {
   default     = ""
   description = "アラート通知先メール"
 }
+
+# ---------- Tier 2 セキュリティ強化 ----------
+variable "enable_waf" {
+  type        = bool
+  default     = true # prod は WAF 必須
+  description = "WAFv2 (CloudFront scope) を有効化"
+}
+
+variable "waf_rate_limit" {
+  type        = number
+  default     = 2000
+  description = "1 IP あたり 5 分間の最大リクエスト数"
+}
+
+variable "enable_guardduty" {
+  type    = bool
+  default = true
+}
+
+variable "enable_flow_logs" {
+  type    = bool
+  default = true
+}
+
+variable "enable_kms_cmk" {
+  type    = bool
+  default = true
+}

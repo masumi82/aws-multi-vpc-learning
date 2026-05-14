@@ -68,11 +68,24 @@ module "ecs" {
   max_capacity         = var.ecs_max_capacity
 }
 
+module "waf" {
+  source = "../../modules/waf"
+  count  = var.enable_waf ? 1 : 0
+
+  providers = {
+    aws = aws.us_east_1
+  }
+
+  env        = local.env
+  rate_limit = var.waf_rate_limit
+}
+
 module "cloudfront_s3" {
   source = "../../modules/cloudfront_s3"
 
   env          = local.env
   alb_dns_name = module.alb.alb_dns_name
+  web_acl_arn  = var.enable_waf ? module.waf[0].web_acl_arn : null
 }
 
 module "monitoring" {
@@ -85,4 +98,10 @@ module "monitoring" {
   alb_arn_suffix          = module.alb.alb_arn_suffix
   target_group_arn_suffix = module.alb.target_group_arn_suffix
   aurora_cluster_id       = module.aurora.cluster_id
+
+  # Tier 2
+  vpc_id           = module.network.vpc_id
+  enable_guardduty = var.enable_guardduty
+  enable_flow_logs = var.enable_flow_logs
+  enable_kms_cmk   = var.enable_kms_cmk
 }

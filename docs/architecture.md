@@ -166,3 +166,23 @@ CloudFront (CFront managed origin-facing prefix list)
 ## 8. 構成図
 
 `docs/architecture.puml` を参照。
+
+---
+
+## 9. Tier 2 セキュリティ強化 (2026-05-14 追加)
+
+詳細は `docs/high-availability-design.md` §4 を参照。本ベース構成に加え、以下を IaC で実装。
+
+| Component | スコープ | env デフォルト | 役割 |
+|---|---|---|---|
+| **WAFv2 Web ACL** (`modules/waf`) | CloudFront (us-east-1) | prod=ON / dev=OFF | OWASP Top 10 + Bot + Rate Limiting (2000 req/5min/IP) |
+| **GuardDuty Detector** | リージョン (ap-northeast-1) | prod=ON / dev=ON | 異常検知 (Crypto / Malware / Anomalous API) |
+| **VPC Flow Logs** | VPC | prod=ON / dev=ON | 全トラフィックを CloudWatch Logs に出力 |
+| **KMS CMK** | リージョン | prod=ON / dev=OFF | Flow Logs / SNS Topic の暗号化に使用 |
+
+- 制約: WAF (CLOUDFRONT scope) は **us-east-1 に作成必須** のため、prod/dev の `providers.tf` に `aws.us_east_1` alias を追加。
+- WAF Managed Rule Groups:
+  - `AWSManagedRulesCommonRuleSet`
+  - `AWSManagedRulesKnownBadInputsRuleSet`
+  - `AWSManagedRulesAmazonIpReputationList`
+- 検証: Integration tests I28-I33、Chaos test C6 (SQLi/XSS payload で 403 を確認)。

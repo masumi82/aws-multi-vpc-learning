@@ -11,3 +11,16 @@ output "alarm_names" {
     aws_cloudwatch_metric_alarm.aurora_freeable_memory.alarm_name,
   ]
 }
+
+# ---------- Tier 2 ----------
+output "guardduty_detector_id" {
+  value = var.enable_guardduty ? aws_guardduty_detector.this[0].id : null
+}
+
+output "flow_logs_log_group" {
+  value = var.enable_flow_logs ? aws_cloudwatch_log_group.flow_logs[0].name : null
+}
+
+output "kms_key_arn" {
+  value = var.enable_kms_cmk ? aws_kms_key.logs[0].arn : null
+}

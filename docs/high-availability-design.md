@@ -90,17 +90,20 @@ modules/alb:     cross_zone_load_balancing = true
 
 **目的**: 外部攻撃耐性 / 観測性向上。冗長性ではないが、可用性に直結する。
 
+> 🟢 **実装ステータス (2026-05-14)**: IaC (Terraform) を実装済。実 apply は未実施。
+> dev は WAF/CMK を OFF にしてコスト抑制、prod は全 ON がデフォルト。
+
 ### 追加コンポーネント
 
-| Component | 役割 | 月額 |
-|---|---|---|
-| **AWS WAF v2** (CloudFront 紐付け) | OWASP Top 10 / Bot / Rate Limiting | $5 + $1/100 万 req |
-| **AWS Shield Standard** | DDoS L3/L4 (自動有効) | 無料 |
-| **AWS Shield Advanced** (任意) | L7 DDoS + 24/7 サポート + DDRT | $3,000/月 (学習スコープ外) |
-| **VPC Flow Logs** (CloudWatch) | ネットワーク証跡 | $2-5 |
-| **GuardDuty** | 異常検知 (マルウェア・暗号通貨マイニング 等) | $30 (検証期間限定なら無料枠あり) |
-| **KMS Customer Managed Key** | Aurora / S3 / Logs の暗号化キーを自己管理 | $1 + $0.03/10k 操作 |
-| **Secrets Manager Rotation** | DB パスワード自動ローテーション | $0.4/月 |
+| Component | 役割 | 月額 | 実装状況 |
+|---|---|---|---|
+| **AWS WAF v2** (CloudFront 紐付け) | OWASP Top 10 / Bot / Rate Limiting | $5 + $1/100 万 req | ✅ `modules/waf` |
+| **AWS Shield Standard** | DDoS L3/L4 (自動有効) | 無料 | ✅ AWS 自動有効化 (TF 不要) |
+| **AWS Shield Advanced** (任意) | L7 DDoS + 24/7 サポート + DDRT | $3,000/月 (学習スコープ外) | ✗ スコープ外 |
+| **VPC Flow Logs** (CloudWatch) | ネットワーク証跡 | $2-5 | ✅ `modules/monitoring/security.tf` |
+| **GuardDuty** | 異常検知 (マルウェア・暗号通貨マイニング 等) | $30 (検証期間限定なら無料枠あり) | ✅ `modules/monitoring/security.tf` |
+| **KMS Customer Managed Key** | Logs / SNS の暗号化キーを自己管理 | $1 + $0.03/10k 操作 | ✅ `modules/monitoring/security.tf` |
+| **Secrets Manager Rotation** | DB パスワード自動ローテーション | $0.4/月 | △ Aurora master_user_secret は既に AWS managed |
 
 ### WAF Managed Rules (推奨)
 

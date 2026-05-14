@@ -2,7 +2,8 @@
 # SNS Topic for alerts
 # ============================================================
 resource "aws_sns_topic" "alerts" {
-  name = "${var.env}-alerts"
+  name              = "${var.env}-alerts"
+  kms_master_key_id = var.enable_kms_cmk ? aws_kms_key.logs[0].arn : null
 
   tags = { Name = "${var.env}-alerts" }
 }

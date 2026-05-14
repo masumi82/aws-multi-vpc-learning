@@ -44,3 +44,31 @@ variable "aurora_cpu_threshold" {
   type    = number
   default = 80
 }
+
+# ---------- Tier 2 セキュリティ拡張 ----------
+variable "vpc_id" {
+  type        = string
+  default     = null
+  description = "VPC ID for Flow Logs. Required when enable_flow_logs = true."
+}
+
+variable "enable_guardduty" {
+  type    = bool
+  default = false
+}
+
+variable "enable_flow_logs" {
+  type    = bool
+  default = false
+}
+
+variable "enable_kms_cmk" {
+  type        = bool
+  default     = false
+  description = "Customer-managed KMS key for Flow Logs CloudWatch Logs and SNS encryption."
+}
+
+variable "flow_logs_retention_days" {
+  type    = number
+  default = 14
+}

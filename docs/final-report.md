@@ -289,4 +289,34 @@ terraform destroy -auto-approve
 
 ---
 
+## 11. Tier 2 セキュリティ強化 (2026-05-14 追加・IaC のみ)
+
+Tier 1 撤収後、`docs/high-availability-design.md` §4 に基づき Tier 2 を Terraform で実装した
+(実 apply はコスト発生のため未実施)。
+
+### 実装コンポーネント
+
+| Component | 場所 | env デフォルト |
+|---|---|---|
+| **WAFv2 Web ACL** | `terraform/modules/waf` | prod=ON / dev=OFF (コスト抑制) |
+| **GuardDuty Detector** | `terraform/modules/monitoring/security.tf` | prod/dev=ON |
+| **VPC Flow Logs** | `terraform/modules/monitoring/security.tf` | prod/dev=ON |
+| **KMS CMK** (Logs/SNS 暗号化) | `terraform/modules/monitoring/security.tf` | prod=ON / dev=OFF |
+
+### 設計上のポイント
+
+- WAF (`scope=CLOUDFRONT`) は **us-east-1 必須**: prod/dev の `providers.tf` に
+  `aws.us_east_1` alias を追加し、WAF モジュール呼び出し時に `providers = { aws = aws.us_east_1 }` で明示。
+- すべての Tier 2 リソースは `enable_*` フラグでオプトイン化、デフォルト false にして後方互換維持。
+- WAF Managed Rule: CommonRuleSet + KnownBadInputs + AmazonIpReputationList + Rate-based (2000 req/5min/IP)。
+
+### テスト追加
+
+- Integration I28-I33: WAF / GuardDuty / Flow Logs / KMS の存在・有効性検証 (env フラグで SKIP)。
+- Chaos C6: CloudFront 経由で SQLi/XSS payload を投げて 403 ブロックを確認、サンプリングログを表示。
+- Static (S1-S3) は両 env で PASS 確認済 (`terraform validate` Success)。
+
+---
+
 **プロジェクトステータス**: ✅ **完了** (構築 → 検証 → 撤収 全工程完了、課金停止確認済み)
++ Tier 2 IaC 実装済 (apply 未実施)

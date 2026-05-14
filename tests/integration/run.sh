@@ -271,5 +271,61 @@ if [ "$TF_ENV" = "prod" ]; then
   assert I27 "Per-AZ App Route Tables = 3 (prod Tier 1)" "[ '$APP_RT_COUNT' = '3' ]" "$APP_RT_COUNT"
 fi
 
+# ===================================================
+# Tier 2: WAF / GuardDuty / Flow Logs / KMS
+# WAF/CMK は env により有効/無効が異なるので outputs を見て分岐
+# ===================================================
+WAF_ARN=$(out waf_web_acl_arn)
+GD_DETECTOR=$(out guardduty_detector_id)
+FLOW_LG=$(out flow_logs_log_group)
+KMS_ARN=$(out kms_logs_key_arn)
+
+# I28: WAF Web ACL (CLOUDFRONT scope, us-east-1) — enable_waf=true 環境のみ
+if [ -n "$WAF_ARN" ] && [ "$WAF_ARN" != "null" ]; then
+  WAF_NAME=$(aws wafv2 list-web-acls --scope CLOUDFRONT --region us-east-1 \
+    --query "WebACLs[?ARN=='$WAF_ARN'].Name | [0]" --output text 2>/dev/null)
+  assert I28 "WAFv2 Web ACL exists in us-east-1 (CLOUDFRONT scope)" "[ '$WAF_NAME' = '$TF_ENV-cloudfront-acl' ]" "$WAF_NAME"
+
+  CF_WAF_ID=$(aws cloudfront get-distribution --id "$CF_ID" \
+    --query 'Distribution.DistributionConfig.WebACLId' --output text 2>/dev/null)
+  assert I29 "CloudFront distribution associated with WAF" "[ '$CF_WAF_ID' = '$WAF_ARN' ]" "$CF_WAF_ID"
+else
+  echo "SKIP I28-I29 (enable_waf=false)"
+fi
+
+# I30: GuardDuty Detector enabled
+if [ -n "$GD_DETECTOR" ] && [ "$GD_DETECTOR" != "null" ]; then
+  GD_STATUS=$(aws guardduty get-detector --region "$REGION" \
+    --detector-id "$GD_DETECTOR" --query 'Status' --output text 2>/dev/null)
+  assert I30 "GuardDuty Detector status=ENABLED" "[ '$GD_STATUS' = 'ENABLED' ]" "$GD_STATUS"
+else
+  echo "SKIP I30 (enable_guardduty=false)"
+fi
+
+# I31: VPC Flow Logs active for VPC
+if [ -n "$FLOW_LG" ] && [ "$FLOW_LG" != "null" ]; then
+  FLOW_STATE=$(aws ec2 describe-flow-logs --region "$REGION" \
+    --filter "Name=resource-id,Values=$VPC_ID" \
+    --query 'FlowLogs[0].FlowLogStatus' --output text 2>/dev/null)
+  assert I31 "VPC Flow Logs status=ACTIVE" "[ '$FLOW_STATE' = 'ACTIVE' ]" "$FLOW_STATE"
+
+  LG_EXISTS=$(aws logs describe-log-groups --region "$REGION" \
+    --log-group-name-prefix "$FLOW_LG" \
+    --query "logGroups[?logGroupName=='$FLOW_LG'] | length(@)" --output text 2>/dev/null)
+  assert I33 "Flow Logs CloudWatch Log Group exists" "[ '$LG_EXISTS' = '1' ]" "$LG_EXISTS"
+else
+  echo "SKIP I31, I33 (enable_flow_logs=false)"
+fi
+
+# I32: KMS CMK key rotation enabled
+if [ -n "$KMS_ARN" ] && [ "$KMS_ARN" != "null" ]; then
+  KMS_KEY_ID=$(echo "$KMS_ARN" | awk -F'/' '{print $NF}')
+  ROTATION=$(aws kms get-key-rotation-status --region "$REGION" \
+    --key-id "$KMS_KEY_ID" --query 'KeyRotationEnabled' --output text 2>/dev/null)
+  assert I32 "KMS CMK key rotation enabled" "[ '$ROTATION' = 'True' ] || [ '$ROTATION' = 'true' ]" "$ROTATION"
+else
+  echo "SKIP I32 (enable_kms_cmk=false)"
+fi
+
 echo "==== Integration Result: ${GREEN}${PASS} passed${NC}, ${RED}${FAIL} failed${NC} ===="
 [ "$FAIL" -eq 0 ]

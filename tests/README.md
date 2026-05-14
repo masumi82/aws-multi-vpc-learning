@@ -16,13 +16,14 @@ TF_ENV=dev ./tests/run-all.sh integration
 # 3. E2E (apply 後 + CloudFront Deployed 後)
 TF_ENV=dev ./tests/run-all.sh e2e
 
-# 4. Chaos (Tier 1 HA 動的検証)
-TF_ENV=dev ./tests/run-all.sh chaos c1   # task kill
-TF_ENV=dev ./tests/run-all.sh chaos c2   # Aurora failover
-TF_ENV=dev ./tests/run-all.sh chaos c3   # Auto Scaling
-TF_ENV=dev ./tests/run-all.sh chaos c4   # Alarm fire
-TF_ENV=prod ./tests/run-all.sh chaos c5  # AZ failure
-TF_ENV=dev ./tests/run-all.sh chaos all  # C1+C2+C4 まとめて
+# 4. Chaos (Tier 1 HA + Tier 2 セキュリティ動的検証)
+TF_ENV=dev ./tests/run-all.sh chaos c1    # task kill
+TF_ENV=dev ./tests/run-all.sh chaos c2    # Aurora failover
+TF_ENV=dev ./tests/run-all.sh chaos c3    # Auto Scaling
+TF_ENV=dev ./tests/run-all.sh chaos c4    # Alarm fire
+TF_ENV=prod ./tests/run-all.sh chaos c5   # AZ failure
+TF_ENV=prod ./tests/run-all.sh chaos c6   # WAF block 検証 (Tier 2)
+TF_ENV=dev ./tests/run-all.sh chaos all   # C1+C2+C4+C6 まとめて
 
 # 5. 全部 (apply 後)
 TF_ENV=dev ./tests/run-all.sh all
@@ -33,9 +34,9 @@ TF_ENV=dev ./tests/run-all.sh all
 | | 内容 | 実行条件 | 所要 |
 |---|---|---|---|
 | **Static** | `terraform fmt -check` / `terraform validate` / secret 漏洩 grep / `.gitignore` チェック | apply 不要 | 30 秒 |
-| **Integration** | AWS CLI でリソース実体の検証 (27 シナリオ) | apply 完了後 | 1-2 分 |
+| **Integration** | AWS CLI でリソース実体の検証 (33 シナリオ・Tier 2 含む) | apply 完了後 | 1-2 分 |
 | **E2E** | Playwright で CloudFront URL に対する HTTP 検証 (UI / API / SPA フォールバック / HTTP→HTTPS / ALB 直叩き遮断) | Distribution Deployed 後 | 2-3 分 |
-| **Chaos** | 障害注入による動的挙動検証 (Tier 1 HA: タスク自動復旧 / Aurora failover / Auto Scaling / Alarm 発火 / AZ 障害) | apply 後・安定稼働中 | 3-10 分/シナリオ |
+| **Chaos** | 障害注入による動的挙動検証 (Tier 1: タスク復旧 / Aurora failover / Auto Scaling / Alarm / AZ 障害、Tier 2: WAF block) | apply 後・安定稼働中 | 3-10 分/シナリオ |
 
 シナリオ詳細は `scenarios.md` / `chaos/README.md` を参照。
 

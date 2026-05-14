@@ -26,6 +26,7 @@ case "$TARGET" in
   c3)  bash "$ROOT/tests/chaos/c3-cpu-load.sh" ;;
   c4)  bash "$ROOT/tests/chaos/c4-alarm-fire.sh" ;;
   c5)  bash "$ROOT/tests/chaos/c5-az-failure.sh" ;;
+  c6)  bash "$ROOT/tests/chaos/c6-waf-block.sh" ;;
   all)
     bash "$ROOT/tests/chaos/c1-kill-task.sh"
     echo
@@ -33,18 +34,21 @@ case "$TARGET" in
     echo
     bash "$ROOT/tests/chaos/c4-alarm-fire.sh"
     echo
+    bash "$ROOT/tests/chaos/c6-waf-block.sh"
+    echo
     echo "Note: C3 (CPU load) と C5 (AZ failure) は時間がかかるため別途実行してください"
     ;;
   help|*)
     cat <<EOF
-Usage: TF_ENV=dev $0 {c1|c2|c3|c4|c5|all|help}
+Usage: TF_ENV=dev $0 {c1|c2|c3|c4|c5|c6|all|help}
 
   c1   ECS task kill → 自動復旧確認 (3 分)
   c2   Aurora Writer failover → reader 昇格 (3 分)
   c3   ECS CPU 負荷注入 → Auto Scaling (10 分)
   c4   CloudWatch alarm 強制発火 → SNS 通知 (3 分)
   c5   AZ 全タスク停止 → 残 AZ で継続稼働 (5 分・prod 推奨)
-  all  c1 + c2 + c4 を順次実行
+  c6   WAF Managed Rule block 検証 (Tier 2、enable_waf=true 環境)
+  all  c1 + c2 + c4 + c6 を順次実行
 EOF
     ;;
 esac

@@ -50,3 +50,20 @@ output "nat_gateway_count" {
 output "sns_alerts_topic_arn" {
   value = module.monitoring.sns_topic_arn
 }
+
+# ---------- Tier 2 ----------
+output "waf_web_acl_arn" {
+  value = var.enable_waf ? module.waf[0].web_acl_arn : null
+}
+
+output "guardduty_detector_id" {
+  value = module.monitoring.guardduty_detector_id
+}
+
+output "flow_logs_log_group" {
+  value = module.monitoring.flow_logs_log_group
+}
+
+output "kms_logs_key_arn" {
+  value = module.monitoring.kms_key_arn
+}
