@@ -124,7 +124,8 @@ resource "aws_cloudfront_distribution" "this" {
     path_pattern           = "/api/*"
     target_origin_id       = local.alb_target_origin_id
     viewer_protocol_policy = "redirect-to-https"
-    allowed_methods        = ["GET", "HEAD", "OPTIONS", "PUT", "POST", "PATCH", "DELETE"]
+    # CloudFront origin groups do not support write methods; DR serves read-only
+    allowed_methods        = var.osaka_alb_dns != "" ? ["GET", "HEAD", "OPTIONS"] : ["GET", "HEAD", "OPTIONS", "PUT", "POST", "PATCH", "DELETE"]
     cached_methods         = ["GET", "HEAD"]
     compress               = false
 

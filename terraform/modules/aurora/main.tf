@@ -23,7 +23,8 @@ resource "aws_rds_cluster" "this" {
   global_cluster_identifier = var.global_cluster_identifier != "" ? var.global_cluster_identifier : null
   source_region             = var.is_secondary ? var.source_region : null
 
-  database_name               = var.is_secondary ? null : var.database_name
+  # Global DB defines the DB name at cluster level; member clusters must omit it
+  database_name               = var.global_cluster_identifier != "" ? null : var.database_name
   master_username             = var.master_username
   master_password             = var.global_cluster_identifier != "" ? random_password.master[0].result : null
   manage_master_user_password = var.global_cluster_identifier != "" ? null : true
