@@ -75,10 +75,11 @@ terraform/
     │   ├── outputs.tf     # global_cluster_identifier 追加
     │   └── terraform.tfvars.example  # osaka_alb_dns = "" プレースホルダー
     ├── dev-osaka/         # 新規
-    │   ├── main.tf        # network(3AZ), alb, ecs, aurora(secondary), monitoring, secrets
+    │   ├── main.tf        # network(3AZ), alb, ecs, aurora(secondary), monitoring
+    │   │                  # + aws_s3_bucket "osaka_destination" (standalone、versioning 有効)
     │   ├── providers.tf   # aws { region = "ap-northeast-3" }
-    │   ├── variables.tf   # global_cluster_identifier, primary_region
-    │   ├── outputs.tf     # alb_dns_name, alb_zone_id
+    │   ├── variables.tf   # global_cluster_identifier, primary_region, app_secret_arn
+    │   ├── outputs.tf     # alb_dns_name, s3_bucket_arn
     │   └── terraform.tfvars.example
     └── prod/              # 変更なし (共有モジュール拡張変数はすべて default="" or false)
 ```
@@ -139,9 +140,9 @@ terraform/
   クロス参照の渡し方 (IaC のみフェーズ: terraform_remote_state は使わない):
   ┌──────────────────────────────────────────────────────────────────────┐
   │ Phase 1: dev/ apply (aurora_global + aurora_primary のみ)            │
-  │   → output: global_cluster_identifier を控える                       │
+  │   → output: global_cluster_identifier, app_secret_arn を控える      │
   │ Phase 2: dev-osaka/tfvars.example に記入 → dev-osaka/ apply         │
-  │   → output: alb_dns_name, alb_zone_id, s3_bucket_arn を控える       │
+  │   → output: alb_dns_name, s3_bucket_arn を控える                    │
   │ Phase 3: dev/tfvars.example に記入 → dev/ apply (CloudFront/R53)    │
   └──────────────────────────────────────────────────────────────────────┘
 
@@ -150,7 +151,7 @@ terraform/
 │  [network]   VPC / Subnet (3 AZ: 3a/3b/3c) / NAT × 3                  │
 │              ※ network module は AZ 数 = 3 バリデーション固定のため 3 AZ │
 │  [alb]       Osaka ALB                                                  │
-│              └─ output: alb_dns_name, alb_zone_id                      │
+│              └─ output: alb_dns_name                                   │
 │  [ecs]       desired_count = 1  (Warm Standby 最小構成)                │
 │  [aurora]    Secondary Read-only Cluster                                │
 │              ├─ is_secondary = true                                     │
@@ -158,9 +159,12 @@ terraform/
 │              ├─ source_region = "ap-northeast-1"                       │
 │              └─ master_username / manage_master_user_password は設定不要│
 │                 (Global DB から自動継承)                                 │
-│  [s3]        Osaka destination バケット (versioning 有効)               │
+│  [s3]        aws_s3_bucket "osaka_destination" (standalone resource)    │
+│              ├─ versioning: enabled                                     │
 │              └─ output: s3_bucket_arn (dev/ CRR config に渡す)         │
-│  [secrets]   Secrets Manager (replica 受け取り側)                       │
+│  [ecs]       app_secret_arn = var.app_secret_arn                       │
+│              └─ Osaka の Secrets Manager replica ARN を渡す             │
+│                 (var.app_secret_arn ← dev/ の secrets module output)   │
 │  [monitoring] CloudWatch Alarms / SNS                                   │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
@@ -196,14 +200,29 @@ variable "source_region"             { default = "" }
 ### 6.3 `modules/cloudfront_s3/` 主な変更点
 
 ```hcl
-# Osaka ALB が設定されている場合のみ origin_group を動的生成
+# Osaka ALB が設定されている場合のみ: Osaka ALB origin block を動的追加
+dynamic "origin" {
+  for_each = var.osaka_alb_dns != "" ? [1] : []
+  content {
+    domain_name = var.osaka_alb_dns
+    origin_id   = "alb-osaka"
+    custom_origin_config {
+      http_port              = 80
+      https_port             = 443
+      origin_protocol_policy = "http-only"
+      origin_ssl_protocols   = ["TLSv1.2"]
+    }
+  }
+}
+
+# Osaka ALB が設定されている場合のみ: Origin Group を動的生成
 dynamic "origin_group" {
   for_each = var.osaka_alb_dns != "" ? [1] : []
   content {
     origin_id = "alb-failover-group"
     failover_criteria { status_codes = [500, 502, 503, 504] }
-    member { origin_id = local.alb_origin_id }       # Tokyo (primary)
-    member { origin_id = "alb-osaka" }                # Osaka (secondary)
+    member { origin_id = local.alb_origin_id }  # Tokyo (primary)
+    member { origin_id = "alb-osaka" }           # Osaka (secondary)
   }
 }
 
@@ -214,24 +233,54 @@ ordered_cache_behavior {
   # ... (他のパラメータは既存と同じ)
 }
 
-# S3 versioning (CRR の前提条件)
+# S3 versioning (CRR の前提条件、常時有効)
 resource "aws_s3_bucket_versioning" "ui" {
   bucket = aws_s3_bucket.ui.id
   versioning_configuration { status = "Enabled" }
 }
 
-# S3 CRR: osaka_s3_bucket_arn が設定されている場合のみ
+# S3 CRR IAM Role: osaka_s3_bucket_arn が設定されている場合のみ
 resource "aws_iam_role" "replication" {
   count = var.osaka_s3_bucket_arn != "" ? 1 : 0
   name  = "${var.env}-s3-replication-role"
-  # ... AssumeRole for s3.amazonaws.com
+  assume_role_policy = jsonencode({
+    Statement = [{ Effect = "Allow", Principal = { Service = "s3.amazonaws.com" },
+                   Action = "sts:AssumeRole" }]
+  })
+}
+
+resource "aws_iam_role_policy" "replication" {
+  count = var.osaka_s3_bucket_arn != "" ? 1 : 0
+  role  = aws_iam_role.replication[0].id
+  policy = jsonencode({
+    Statement = [
+      {
+        Effect   = "Allow"
+        Action   = ["s3:GetReplicationConfiguration", "s3:ListBucket"]
+        Resource = aws_s3_bucket.ui.arn
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["s3:GetObjectVersionForReplication", "s3:GetObjectVersionAcl",
+                    "s3:GetObjectVersionTagging"]
+        Resource = "${aws_s3_bucket.ui.arn}/*"
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["s3:ReplicateObject", "s3:ReplicateDelete", "s3:ReplicateTags"]
+        Resource = "${var.osaka_s3_bucket_arn}/*"
+      }
+    ]
+  })
 }
 
 resource "aws_s3_bucket_replication_configuration" "to_osaka" {
-  count  = var.osaka_s3_bucket_arn != "" ? 1 : 0
-  bucket = aws_s3_bucket.ui.id
-  role   = aws_iam_role.replication[0].arn
+  count      = var.osaka_s3_bucket_arn != "" ? 1 : 0
+  depends_on = [aws_s3_bucket_versioning.ui]
+  bucket     = aws_s3_bucket.ui.id
+  role       = aws_iam_role.replication[0].arn
   rule {
+    id     = "replicate-to-osaka"
     status = "Enabled"
     destination { bucket = var.osaka_s3_bucket_arn }
   }
@@ -240,21 +289,20 @@ resource "aws_s3_bucket_replication_configuration" "to_osaka" {
 
 **新規変数**:
 - `osaka_alb_dns` (default = "") — Osaka ALB DNS 名
-- `osaka_alb_zone_id` (default = "") — Osaka ALB hosted zone ID
 - `osaka_s3_bucket_arn` (default = "") — Osaka S3 CRR ターゲット ARN
 
 ### 6.4 `modules/route53/main.tf` 概要
 
 ```hcl
-# CloudFront エンドポイントに対する Health Check (monitoring 用)
+# CloudFront 経由で ALB まで到達するパス /api/health を監視
+# CloudFront は Route 53 HC IP を許可済み (CF managed prefix list)
 resource "aws_route53_health_check" "cloudfront" {
   fqdn              = var.cloudfront_domain   # *.cloudfront.net
   port              = 443
   type              = "HTTPS"
-  resource_path     = "/"
+  resource_path     = "/api/health"   # /api/* → ALB 経路を監視 (S3 経路 / は不可)
   failure_threshold = 3
   request_interval  = 30
-  # 注: CloudFront SG は Route 53 HC IP を許可済み (CF managed)
 }
 
 # ALIAS Record → CloudFront (DR は CF Origin Group が担当)
@@ -296,20 +344,27 @@ dev-osaka ECS は ECR 複製済みの `dev-app` リポジトリ (ap-northeast-3)
 ### 6.6 `modules/secrets/main.tf`
 
 ```hcl
-# Aurora の manage_master_user_password (RDS 管理) とは別の
-# アプリケーション用シークレット (API キー等) を Osaka にレプリカとして配置
-resource "aws_secretsmanager_secret" "this" {
-  name = "${var.env}/app/config"
+# Aurora manage_master_user_password (RDS 管理 secret) は replica 不可のため、
+# DB 接続情報を含むアプリ用 secret を dev/ で作成し Osaka にレプリカを配置する。
+# Osaka ECS はこの replica ARN (ap-northeast-3) を参照する。
+resource "aws_secretsmanager_secret" "app" {
+  name = "${var.env}/app/db-connection"
   replica {
     region = "ap-northeast-3"
   }
 }
+
+# secret value は apply 後に手動で設定 (or aws_secretsmanager_secret_version で管理)
+# 値の例: { "host": "<aurora-writer-endpoint>", "port": "5432", "username": "...", "password": "..." }
 ```
 
-**DB 接続情報の取り扱い**:
-- Aurora Primary の master_user_secret は RDS 管理のため replica ブロック追加不可
-- Osaka ECS の DB 接続: Aurora failover/promote 後に新しい endpoint を環境変数/Secret として手動更新が必要
-- これは既知の制約 (§8) として明記する
+**Osaka ECS の DB secret 配線**:
+- `dev/` の `modules/secrets` が `dev/app/db-connection` を作成し、ap-northeast-3 にレプリカを持つ
+- `dev/outputs.tf` に `app_secret_replica_arn` (ap-northeast-3 ARN) を追加
+- `dev-osaka/variables.tf` に `app_secret_arn` を追加
+- `dev-osaka/` の ECS module に `aurora_secret_arn = var.app_secret_arn` を渡す
+- Phase 1 apply 後: secret value に Aurora Primary endpoint を書き込む
+- Aurora failover/promote 後: secret value を Osaka endpoint に更新し ECS task を再起動する (既知制約)
 
 ---
 
@@ -320,7 +375,6 @@ resource "aws_secretsmanager_secret" "this" {
 | 変数名 | デフォルト値 | 説明 |
 |---|---|---|
 | `osaka_alb_dns` | `""` | Phase 2 (dev-osaka apply 後) に記入 |
-| `osaka_alb_zone_id` | `""` | Phase 2 (dev-osaka apply 後) に記入 |
 | `osaka_s3_bucket_arn` | `""` | Phase 2 (dev-osaka apply 後) に記入 |
 | `domain_name` | `"dev.example.internal"` | Route 53 レコード用ドメイン (学習用) |
 
@@ -329,6 +383,7 @@ resource "aws_secretsmanager_secret" "this" {
 | 変数名 | デフォルト値 | 説明 |
 |---|---|---|
 | `global_cluster_identifier` | `""` | Phase 1 (dev apply 後) に記入 |
+| `app_secret_arn` | `""` | Phase 1 (dev apply 後) に記入 (Osaka replica ARN) |
 | `primary_region` | `"ap-northeast-1"` | Aurora source_region |
 | `env` | `"dev-osaka"` | リソース名プレフィックス |
 | `azs` | `["ap-northeast-3a", "ap-northeast-3b", "ap-northeast-3c"]` | 3 AZ (module バリデーション対応) |
@@ -375,15 +430,18 @@ resource "aws_secretsmanager_secret" "this" {
 ## 9. apply 順序 (将来の実環境デプロイ時)
 
 ```
-Phase 1: envs/dev/ — aurora_global + aurora_primary のみ apply
-  └─ output: global_cluster_identifier を記録
+Phase 1: envs/dev/ — aurora_global + aurora_primary + secrets のみ apply
+  │  (terraform apply -target=module.aurora_global -target=module.aurora
+  │                   -target=module.secrets)
+  └─ output: global_cluster_identifier, app_secret_replica_arn (ap-northeast-3) を記録
+             → secrets value に Aurora Primary endpoint を書き込む
 
 Phase 2: envs/dev-osaka/ — 全リソース apply
-  ├─ input:  global_cluster_identifier (Phase 1 の output)
-  └─ output: alb_dns_name, alb_zone_id, s3_bucket_arn を記録
+  ├─ input:  global_cluster_identifier, app_secret_arn (Phase 1 の output)
+  └─ output: alb_dns_name, s3_bucket_arn を記録
 
 Phase 3: envs/dev/ — CloudFront Origin Group + Route 53 + S3 CRR apply
-  ├─ input:  osaka_alb_dns, osaka_alb_zone_id, osaka_s3_bucket_arn (Phase 2 の output)
+  ├─ input:  osaka_alb_dns, osaka_s3_bucket_arn (Phase 2 の output)
   └─ output: cloudfront_domain (Route 53 Health Check に使用)
 
 Aurora Global DB レプリケーション確認:
