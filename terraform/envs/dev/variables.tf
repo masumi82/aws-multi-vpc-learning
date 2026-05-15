@@ -41,7 +41,7 @@ variable "aurora_database_name" {
 
 variable "aurora_instance_class" {
   type    = string
-  default = "db.t4g.medium"
+  default = "db.r5.large" # t-class not supported for Aurora Global DB
 }
 
 variable "aurora_reader_count" {
