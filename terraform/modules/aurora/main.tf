@@ -1,7 +1,6 @@
-# Aurora Global DB does not support manage_master_user_password; use a random
-# password instead. Standalone clusters use Secrets Manager managed passwords.
+# Secondary clusters cannot use manage_master_user_password; generate a random password.
 resource "random_password" "master" {
-  count   = var.global_cluster_identifier != "" ? 1 : 0
+  count   = var.is_secondary ? 1 : 0
   length  = 32
   special = false
 }
@@ -15,19 +14,22 @@ resource "aws_db_subnet_group" "this" {
 }
 
 resource "aws_rds_cluster" "this" {
-  cluster_identifier        = "${var.env}-aurora-cluster"
-  engine                    = "aurora-postgresql"
-  engine_mode               = "provisioned"
-  engine_version            = var.engine_version
-  storage_encrypted         = true
-  global_cluster_identifier = var.global_cluster_identifier != "" ? var.global_cluster_identifier : null
+  cluster_identifier = "${var.env}-aurora-cluster"
+  engine             = "aurora-postgresql"
+  engine_mode        = "provisioned"
+  engine_version     = var.engine_version
+  storage_encrypted  = true
+
+  # Secondary clusters join the global cluster explicitly.
+  # For primary clusters, the global_cluster_identifier is set by AWS when
+  # aws_rds_global_cluster is created with source_db_cluster_identifier.
+  global_cluster_identifier = var.is_secondary ? (var.global_cluster_identifier != "" ? var.global_cluster_identifier : null) : null
   source_region             = var.is_secondary ? var.source_region : null
 
-  # Global DB defines the DB name at cluster level; member clusters must omit it
-  database_name               = var.global_cluster_identifier != "" ? null : var.database_name
+  database_name               = var.is_secondary ? null : var.database_name
   master_username             = var.master_username
-  master_password             = var.global_cluster_identifier != "" ? random_password.master[0].result : null
-  manage_master_user_password = var.global_cluster_identifier != "" ? null : true
+  master_password             = var.is_secondary ? random_password.master[0].result : null
+  manage_master_user_password = var.is_secondary ? null : true
 
   db_subnet_group_name   = aws_db_subnet_group.this.name
   vpc_security_group_ids = [var.aurora_sg_id]
@@ -43,6 +45,10 @@ resource "aws_rds_cluster" "this" {
   tags = { Name = "${var.env}-aurora-cluster" }
 
   lifecycle {
+    # When primary joins global cluster via source_db_cluster_identifier,
+    # AWS sets global_cluster_identifier automatically — don't remove it.
+    ignore_changes = [global_cluster_identifier]
+
     precondition {
       condition     = !var.is_secondary || var.source_region != ""
       error_message = "source_region must be set when is_secondary = true."

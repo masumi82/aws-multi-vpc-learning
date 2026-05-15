@@ -2,12 +2,7 @@ variable "env" {
   type = string
 }
 
-variable "engine_version" {
-  type    = string
-  default = "15.10"
-}
-
-variable "database_name" {
-  type    = string
-  default = "appdb"
+variable "source_db_cluster_identifier" {
+  type        = string
+  description = "ARN of the primary Aurora cluster to use as the global cluster source"
 }

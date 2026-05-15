@@ -30,25 +30,25 @@ module "ecr" {
   replication_destination_region  = "ap-northeast-3"
 }
 
-module "aurora_global" {
-  source = "../../modules/aurora_global"
-
-  env            = local.env
-  engine_version = var.aurora_engine_version
-  database_name  = var.aurora_database_name
-}
-
+# Aurora is created standalone first; aurora_global is created FROM aurora.
+# AWS then sets global_cluster_identifier on aurora automatically (lifecycle ignore_changes).
 module "aurora" {
   source = "../../modules/aurora"
 
-  env                       = local.env
-  db_subnet_ids             = module.network.db_subnet_ids
-  aurora_sg_id              = module.security_groups.aurora_sg_id
-  engine_version            = var.aurora_engine_version
-  instance_class            = var.aurora_instance_class
-  reader_count              = var.aurora_reader_count
-  database_name             = var.aurora_database_name
-  global_cluster_identifier = module.aurora_global.global_cluster_identifier
+  env           = local.env
+  db_subnet_ids = module.network.db_subnet_ids
+  aurora_sg_id  = module.security_groups.aurora_sg_id
+  engine_version = var.aurora_engine_version
+  instance_class = var.aurora_instance_class
+  reader_count   = var.aurora_reader_count
+  database_name  = var.aurora_database_name
+}
+
+module "aurora_global" {
+  source = "../../modules/aurora_global"
+
+  env                          = local.env
+  source_db_cluster_identifier = module.aurora.cluster_arn
 }
 
 module "alb" {

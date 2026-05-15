@@ -1,3 +1,8 @@
+output "cluster_arn" {
+  value       = aws_rds_cluster.this.arn
+  description = "ARN used as source_db_cluster_identifier for aws_rds_global_cluster"
+}
+
 output "cluster_id" {
   value = aws_rds_cluster.this.id
 }
