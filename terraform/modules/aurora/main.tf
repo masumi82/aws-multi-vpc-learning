@@ -11,6 +11,7 @@ resource "aws_rds_cluster" "this" {
   engine                    = "aurora-postgresql"
   engine_mode               = "provisioned"
   engine_version            = var.engine_version
+  storage_encrypted         = true
   global_cluster_identifier = var.global_cluster_identifier != "" ? var.global_cluster_identifier : null
   source_region             = var.is_secondary ? var.source_region : null
 
@@ -22,7 +23,7 @@ resource "aws_rds_cluster" "this" {
   vpc_security_group_ids = [var.aurora_sg_id]
 
   backup_retention_period = var.backup_retention_period
-  preferred_backup_window = "17:00-19:00"
+  preferred_backup_window = "17:00-19:00" # UTC = JST 02:00-04:00
 
   skip_final_snapshot = var.skip_final_snapshot
   deletion_protection = var.deletion_protection
@@ -30,6 +31,13 @@ resource "aws_rds_cluster" "this" {
   apply_immediately = true
 
   tags = { Name = "${var.env}-aurora-cluster" }
+
+  lifecycle {
+    precondition {
+      condition     = !var.is_secondary || var.source_region != ""
+      error_message = "source_region must be set when is_secondary = true."
+    }
+  }
 }
 
 # count = 1 (writer) + reader_count
