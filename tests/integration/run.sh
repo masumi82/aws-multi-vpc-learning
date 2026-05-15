@@ -327,5 +327,77 @@ else
   echo "SKIP I32 (enable_kms_cmk=false)"
 fi
 
+# ===================================================
+# Tier 3 Multi-Region
+# ===================================================
+GLOBAL_CLUSTER_ID=$(out global_cluster_identifier 2>/dev/null || echo "")
+OSAKA_ALB=$(out osaka_alb_dns 2>/dev/null || echo "")
+
+# I34: Aurora Global Cluster が存在する (dev 環境のみ)
+if [ -n "$GLOBAL_CLUSTER_ID" ] && [ "$GLOBAL_CLUSTER_ID" != "null" ]; then
+  GC_STATUS=$(aws rds describe-global-clusters --region "$REGION" \
+    --global-cluster-identifier "$GLOBAL_CLUSTER_ID" \
+    --query 'GlobalClusters[0].Status' --output text 2>/dev/null)
+  assert I34 "Aurora Global Cluster exists (status=available)" "[ '$GC_STATUS' = 'available' ]" "$GC_STATUS"
+else
+  echo "SKIP I34 (global_cluster_identifier output not set)"
+fi
+
+# I35: Aurora Primary cluster が global_cluster_identifier を持つ
+AURORA_GLOBAL_ID=$(aws rds describe-db-clusters --region "$REGION" \
+  --db-cluster-identifier "$TF_ENV-aurora-cluster" \
+  --query 'DBClusters[0].GlobalWriteForwardingStatus' --output text 2>/dev/null || echo "")
+if [ -n "$GLOBAL_CLUSTER_ID" ] && [ "$GLOBAL_CLUSTER_ID" != "null" ]; then
+  PRIMARY_GC=$(aws rds describe-db-clusters --region "$REGION" \
+    --db-cluster-identifier "$TF_ENV-aurora-cluster" \
+    --query 'DBClusters[0].GlobalClusterResourceId' --output text 2>/dev/null)
+  assert I35 "Aurora Primary is member of global cluster" "[ -n '$PRIMARY_GC' ]" "$PRIMARY_GC"
+else
+  echo "SKIP I35 (global_cluster_identifier not set)"
+fi
+
+# I36–I38: CloudFront Origin Group (osaka_alb_dns が設定されている場合)
+if [ -n "$OSAKA_ALB" ] && [ "$OSAKA_ALB" != "null" ]; then
+  OG_COUNT=$(aws cloudfront get-distribution --id "$CF_ID" \
+    --query 'length(Distribution.DistributionConfig.OriginGroups.Items)' --output text 2>/dev/null)
+  assert I37 "CloudFront has Origin Group" "[ '$OG_COUNT' -ge '1' ]" "$OG_COUNT"
+
+  TARGET_ORIGIN=$(aws cloudfront get-distribution --id "$CF_ID" \
+    --query "Distribution.DistributionConfig.CacheBehaviors.Items[?PathPattern=='/api/*'].TargetOriginId | [0]" \
+    --output text 2>/dev/null)
+  assert I38 "/api/* cache behavior targets alb-failover-group" "[ '$TARGET_ORIGIN' = 'alb-failover-group' ]" "$TARGET_ORIGIN"
+else
+  echo "SKIP I37-I38 (osaka_alb_dns not set)"
+fi
+
+# I39: Tokyo S3 に replication configuration が設定されている (source 側)
+if [ -n "$OSAKA_ALB" ] && [ "$OSAKA_ALB" != "null" ]; then
+  REPLICATION_ROLE=$(aws s3api get-bucket-replication --bucket "$S3_BUCKET" \
+    --query 'ReplicationConfiguration.Role' --output text 2>/dev/null)
+  assert I39 "Tokyo S3 has replication configuration" "[ -n '$REPLICATION_ROLE' ]" "$REPLICATION_ROLE"
+else
+  echo "SKIP I39 (osaka_s3_bucket_arn not set)"
+fi
+
+# I41: ECR Replication Configuration に ap-northeast-3 が含まれる
+ECR_REP_REGION=$(aws ecr describe-registry --region "$REGION" \
+  --query "ReplicationConfiguration.Rules[*].Destinations[?Region=='ap-northeast-3'].Region | [0][0]" \
+  --output text 2>/dev/null)
+if [ -n "$ECR_REP_REGION" ] && [ "$ECR_REP_REGION" != "None" ]; then
+  assert I41 "ECR Replication targets ap-northeast-3" "[ '$ECR_REP_REGION' = 'ap-northeast-3' ]" "$ECR_REP_REGION"
+else
+  echo "SKIP I41 (enable_ecr_replication=false)"
+fi
+
+# I42: Route 53 Health Check が CloudFront ドメインを監視している
+HC_ID=$(out route53_health_check_id 2>/dev/null || echo "")
+if [ -n "$HC_ID" ] && [ "$HC_ID" != "null" ]; then
+  HC_FQDN=$(aws route53 get-health-check --health-check-id "$HC_ID" \
+    --query 'HealthCheck.HealthCheckConfig.FullyQualifiedDomainName' --output text 2>/dev/null)
+  assert I42 "Route 53 HC monitors CloudFront domain" "[ '$HC_FQDN' = '$CF_DOMAIN' ]" "$HC_FQDN"
+else
+  echo "SKIP I42 (enable_route53=false)"
+fi
+
 echo "==== Integration Result: ${GREEN}${PASS} passed${NC}, ${RED}${FAIL} failed${NC} ===="
 [ "$FAIL" -eq 0 ]
