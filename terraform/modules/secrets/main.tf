@@ -1,3 +1,5 @@
+data "aws_region" "current" {}
+
 resource "aws_secretsmanager_secret" "app" {
   name                    = "${var.env}/app/db-connection"
   description             = "Application DB connection info with cross-region replica"
