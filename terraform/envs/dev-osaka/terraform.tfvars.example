@@ -1,0 +1,14 @@
+# envs/dev-osaka 用 tfvars.
+# このファイルを terraform.tfvars にコピーして編集。
+# tfvars 自体は .gitignore で除外、example はコミット OK。
+
+# Phase 1: envs/dev/ apply 後に以下を記入
+# global_cluster_identifier = "<output of: terraform -chdir=terraform/envs/dev output -raw global_cluster_identifier>"
+# app_secret_replica_arn    = "<output of: terraform -chdir=terraform/envs/dev output -raw app_secret_replica_arn>"
+
+# ECR repo URL in Osaka (after ECR replication is enabled in dev/)
+# ecr_repository_url = "<account_id>.dkr.ecr.ap-northeast-3.amazonaws.com/dev-app"
+
+# Aurora engine version — verify before apply:
+# aws rds describe-db-engine-versions --engine aurora-postgresql --region ap-northeast-3
+# aurora_engine_version = "15.10"
