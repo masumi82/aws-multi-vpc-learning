@@ -6,6 +6,12 @@ resource "random_password" "master" {
   special = false
 }
 
+# Encrypted cross-region replicas require an explicit KMS key in the replica region.
+data "aws_kms_key" "rds" {
+  count  = var.is_secondary ? 1 : 0
+  key_id = "alias/aws/rds"
+}
+
 resource "aws_db_subnet_group" "this" {
   name        = "${var.env}-aurora-subnet-group"
   description = "DB Subnet Group for ${var.env} Aurora cluster (3 AZ)"
@@ -19,7 +25,8 @@ resource "aws_rds_cluster" "this" {
   engine             = "aurora-postgresql"
   engine_mode        = "provisioned"
   engine_version     = var.engine_version
-  storage_encrypted  = true
+  storage_encrypted = true
+  kms_key_id        = var.is_secondary ? data.aws_kms_key.rds[0].arn : null
 
   # Secondary clusters join the global cluster explicitly.
   # Primary clusters join via source_db_cluster_identifier in aurora_global;
