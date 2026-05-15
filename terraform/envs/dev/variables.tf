@@ -34,6 +34,11 @@ variable "aurora_engine_version" {
   description = "Run `aws rds describe-db-engine-versions --engine aurora-postgresql` to verify before apply."
 }
 
+variable "aurora_database_name" {
+  type    = string
+  default = "appdb"
+}
+
 variable "aurora_instance_class" {
   type    = string
   default = "db.t4g.medium"

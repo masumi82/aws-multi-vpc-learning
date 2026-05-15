@@ -46,11 +46,11 @@ STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
   "https://${CF_DOMAIN}/api/health" \
   -H "User-Agent: chaos-c7-failover" --max-time 15 2>/dev/null || echo "000")
 echo "  /api/health via CloudFront → HTTP $STATUS"
-if [ "$STATUS" = "200" ] || [ "$STATUS" = "404" ] || [ "$STATUS" = "503" ]; then
+if [ "$STATUS" = "200" ] || [ "$STATUS" = "404" ]; then
   printf "  ${GREEN}PASS${NC} C7.1 CloudFront returned response (Osaka ALB handling traffic)\n"
   PASS=$((PASS+1))
 else
-  printf "  ${YELLOW}WARN${NC} C7.1 Unexpected status=$STATUS (CloudFront may still be routing to Tokyo)\n"
+  printf "  ${YELLOW}WARN${NC} C7.1 status=$STATUS — CloudFront may be returning 503 (both origins unavailable) or still routing to Tokyo\n"
   FAIL=$((FAIL+1))
 fi
 

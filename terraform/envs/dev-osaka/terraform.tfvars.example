@@ -6,6 +6,19 @@
 # global_cluster_identifier = "<output of: terraform -chdir=terraform/envs/dev output -raw global_cluster_identifier>"
 # app_secret_replica_arn    = "<output of: terraform -chdir=terraform/envs/dev output -raw app_secret_replica_arn>"
 
+# Phase 2.5: (REQUIRED) Populate the app secret before ECS startup
+# After dev-osaka/ apply, the cross-region replica secret is empty.
+# ECS tasks will fail to start until you populate it:
+# 1. Get Aurora writer endpoint:
+#    terraform -chdir=terraform/envs/dev output -raw aurora_writer_endpoint
+# 2. Populate the secret in Osaka:
+#    aws secretsmanager put-secret-value \
+#      --region ap-northeast-3 \
+#      --secret-id "dev/app/db-connection" \
+#      --secret-string '{"username":"<aurora_master_user>","password":"<from_aws_console>","host":"<writer_endpoint>","dbname":"appdb","port":"5432"}'
+# Note: Get the actual master username/password from:
+#   aws secretsmanager get-secret-value --region ap-northeast-1 --secret-id dev-aurora-cluster
+
 # ECR repo URL in Osaka (after ECR replication is enabled in dev/)
 # ecr_repository_url = "<account_id>.dkr.ecr.ap-northeast-3.amazonaws.com/dev-app"
 

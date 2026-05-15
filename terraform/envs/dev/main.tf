@@ -35,7 +35,7 @@ module "aurora_global" {
 
   env            = local.env
   engine_version = var.aurora_engine_version
-  database_name  = "appdb"
+  database_name  = var.aurora_database_name
 }
 
 module "aurora" {
@@ -47,6 +47,7 @@ module "aurora" {
   engine_version            = var.aurora_engine_version
   instance_class            = var.aurora_instance_class
   reader_count              = var.aurora_reader_count
+  database_name             = var.aurora_database_name
   global_cluster_identifier = module.aurora_global.global_cluster_identifier
 }
 

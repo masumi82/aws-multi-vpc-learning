@@ -32,6 +32,10 @@ resource "aws_ecr_lifecycle_policy" "this" {
 
 data "aws_caller_identity" "current" {}
 
+# IMPORTANT: aws_ecr_replication_configuration is an account-level singleton.
+# Setting this in dev/ will affect ALL ECR repositories in the account.
+# If using this in multiple environments, only enable in one (e.g., dev/).
+# See: https://docs.aws.amazon.com/AmazonECR/latest/userguide/replication.html
 resource "aws_ecr_replication_configuration" "this" {
   count = var.enable_cross_region_replication ? 1 : 0
 

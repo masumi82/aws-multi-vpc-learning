@@ -333,6 +333,16 @@ fi
 GLOBAL_CLUSTER_ID=$(out global_cluster_identifier 2>/dev/null || echo "")
 OSAKA_ALB=$(out osaka_alb_dns 2>/dev/null || echo "")
 
+# I36: Aurora Secondary (Osaka) が global_cluster に参加している
+if [ -n "$GLOBAL_CLUSTER_ID" ] && [ "$GLOBAL_CLUSTER_ID" != "null" ]; then
+  SECONDARY_GC=$(aws rds describe-db-clusters --region "ap-northeast-3" \
+    --db-cluster-identifier "dev-osaka-aurora-cluster" \
+    --query 'DBClusters[0].GlobalClusterIdentifier' --output text 2>/dev/null || echo "")
+  assert I36 "Aurora Secondary (Osaka) joined global cluster" "[ -n '$SECONDARY_GC' ]" "$SECONDARY_GC"
+else
+  echo "SKIP I36 (global_cluster_identifier not set)"
+fi
+
 # I34: Aurora Global Cluster が存在する (dev 環境のみ)
 if [ -n "$GLOBAL_CLUSTER_ID" ] && [ "$GLOBAL_CLUSTER_ID" != "null" ]; then
   GC_STATUS=$(aws rds describe-global-clusters --region "$REGION" \
@@ -377,6 +387,17 @@ if [ -n "$OSAKA_ALB" ] && [ "$OSAKA_ALB" != "null" ]; then
   assert I39 "Tokyo S3 has replication configuration" "[ -n '$REPLICATION_ROLE' ]" "$REPLICATION_ROLE"
 else
   echo "SKIP I39 (osaka_s3_bucket_arn not set)"
+fi
+
+# I40: Osaka S3 destination bucket に versioning が有効
+OSAKA_S3_ARN=$(out osaka_s3_bucket_arn 2>/dev/null || echo "")
+if [ -n "$OSAKA_S3_ARN" ] && [ "$OSAKA_S3_ARN" != "null" ]; then
+  OSAKA_S3_BUCKET=$(echo "$OSAKA_S3_ARN" | sed 's|arn:aws:s3:::||')
+  S3_VER_STATUS=$(aws s3api get-bucket-versioning --bucket "$OSAKA_S3_BUCKET" --region "ap-northeast-3" \
+    --query 'Status' --output text 2>/dev/null || echo "")
+  assert I40 "Osaka S3 destination bucket versioning is Enabled" "[ '$S3_VER_STATUS' = 'Enabled' ]" "$S3_VER_STATUS"
+else
+  echo "SKIP I40 (osaka_s3_bucket_arn not set)"
 fi
 
 # I41: ECR Replication Configuration に ap-northeast-3 が含まれる
