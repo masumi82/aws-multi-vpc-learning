@@ -107,6 +107,15 @@ false の場合は該当アサーションを SKIP する。
 | I31 | VPC Flow Logs が ACTIVE | traffic_type=ALL |
 | I32 | KMS CMK のキーローテーションが有効 | rotation_enabled=true |
 | I33 | Flow Logs 用 CloudWatch Log Group 存在 | `/aws/vpc/${env}-flow-logs` |
+| I34 | Aurora Global Cluster が存在する | dev | Tier 3 |
+| I35 | Aurora Primary が global_cluster_identifier を持つ | dev | Tier 3 |
+| I36 | Aurora Secondary (Osaka) が global_cluster に参加している | dev-osaka | Tier 3 |
+| I37 | CloudFront に Origin Group が設定されている | dev | Tier 3 |
+| I38 | /api/* behavior の target_origin_id が alb-failover-group | dev | Tier 3 |
+| I39 | Tokyo S3 に replication configuration がある | dev | Tier 3 |
+| I40 | Osaka S3 に versioning が有効 | dev-osaka | Tier 3 |
+| I41 | ECR Replication に ap-northeast-3 が含まれる | dev | Tier 3 |
+| I42 | Route 53 HC が CloudFront ドメインを監視 | dev | Tier 3 |
 
 ---
 
@@ -123,6 +132,7 @@ false の場合は該当アサーションを SKIP する。
 | C4 | CloudWatch にカスタムメトリクスを put して Alarm を発火 | Alarm 状態が `ALARM` に遷移、SNS 通知発行 | 3 分 |
 | C5 | (prod のみ) ECS タスクを特定 AZ で全停止 | 残り 2 AZ で稼働継続、Auto Scaling が AZ 分散を維持 | 5 分 |
 | C6 | CloudFront 経由で SQLi/XSS の典型 payload を投げる | WAFv2 Managed Rule が 403 で block、正常 request は通る (Tier 2、`enable_waf=true` のみ) | 3 分 |
+| C7 | DR Failover Simulation: Tokyo ECS 停止 → CloudFront Osaka 切替確認 | dev+dev-osaka | Tier 3 |
 
 詳細は `tests/chaos/README.md` を参照。
 

@@ -186,3 +186,21 @@ CloudFront (CFront managed origin-facing prefix list)
   - `AWSManagedRulesKnownBadInputsRuleSet`
   - `AWSManagedRulesAmazonIpReputationList`
 - 検証: Integration tests I28-I33、Chaos test C6 (SQLi/XSS payload で 403 を確認)。
+
+---
+
+## 10. Tier 3 セキュリティと DR 強化 (2026-05-15 実装)
+
+### Multi-Region Warm Standby
+
+| コンポーネント | 実装 |
+|---|---|
+| Aurora Global DB | `modules/aurora_global` + `modules/aurora` (is_secondary 拡張) |
+| CloudFront Origin Group | `modules/cloudfront_s3` (動的 origin + origin_group) |
+| S3 Cross-Region Replication | `modules/cloudfront_s3` (versioning + CRR IAM + config) |
+| Route 53 Health Check + ALIAS | `modules/route53` (新規) |
+| ECR Cross-Region Replication | `modules/ecr` (account-level replication config) |
+| Secrets Manager Multi-Region | `modules/secrets` (新規、replica) |
+| Osaka 環境 | `envs/dev-osaka` (ap-northeast-3、Warm Standby 最小構成) |
+
+Apply order: `envs/dev` Phase1 → `envs/dev-osaka` → `envs/dev` Phase3

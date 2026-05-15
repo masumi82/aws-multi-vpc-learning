@@ -129,6 +129,9 @@ modules/monitoring (拡張):
 
 ## 5. Tier 3: Multi-Region Warm Standby (DR)
 
+> 🟢 **実装ステータス (2026-05-15)**: IaC (Terraform) を実装済。実 apply は未実施。
+> dev-osaka は aurora_global に依存する 3 フェーズ apply 方式。prod は変更なし (後方互換)。
+
 **目的**: リージョン全体障害 (極めて稀だが過去事例あり) でもサービス継続。
 
 ### 構成
