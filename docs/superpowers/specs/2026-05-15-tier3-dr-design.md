@@ -71,14 +71,14 @@ terraform/
     │   │                  # aurora モジュールに global_cluster_identifier 追加
     │   │                  # cloudfront_s3 に osaka_alb_dns / osaka_s3_arn 追加
     │   │                  # route53 モジュール追加
-    │   ├── variables.tf   # osaka_alb_dns, osaka_alb_zone_id, domain_name 追加
+    │   ├── variables.tf   # osaka_alb_dns, osaka_s3_bucket_arn, domain_name 追加
     │   ├── outputs.tf     # global_cluster_identifier 追加
     │   └── terraform.tfvars.example  # osaka_alb_dns = "" プレースホルダー
     ├── dev-osaka/         # 新規
     │   ├── main.tf        # network(3AZ), alb, ecs, aurora(secondary), monitoring
     │   │                  # + aws_s3_bucket "osaka_destination" (standalone、versioning 有効)
     │   ├── providers.tf   # aws { region = "ap-northeast-3" }
-    │   ├── variables.tf   # global_cluster_identifier, primary_region, app_secret_arn
+    │   ├── variables.tf   # global_cluster_identifier, primary_region, app_secret_replica_arn
     │   ├── outputs.tf     # alb_dns_name, s3_bucket_arn
     │   └── terraform.tfvars.example
     └── prod/              # 変更なし (共有モジュール拡張変数はすべて default="" or false)
@@ -140,7 +140,7 @@ terraform/
   クロス参照の渡し方 (IaC のみフェーズ: terraform_remote_state は使わない):
   ┌──────────────────────────────────────────────────────────────────────┐
   │ Phase 1: dev/ apply (aurora_global + aurora_primary のみ)            │
-  │   → output: global_cluster_identifier, app_secret_arn を控える      │
+  │   → output: global_cluster_identifier, app_secret_replica_arn を控える      │
   │ Phase 2: dev-osaka/tfvars.example に記入 → dev-osaka/ apply         │
   │   → output: alb_dns_name, s3_bucket_arn を控える                    │
   │ Phase 3: dev/tfvars.example に記入 → dev/ apply (CloudFront/R53)    │
@@ -162,9 +162,9 @@ terraform/
 │  [s3]        aws_s3_bucket "osaka_destination" (standalone resource)    │
 │              ├─ versioning: enabled                                     │
 │              └─ output: s3_bucket_arn (dev/ CRR config に渡す)         │
-│  [ecs]       app_secret_arn = var.app_secret_arn                       │
+│  [ecs]       app_secret_replica_arn = var.app_secret_replica_arn                       │
 │              └─ Osaka の Secrets Manager replica ARN を渡す             │
-│                 (var.app_secret_arn ← dev/ の secrets module output)   │
+│                 (var.app_secret_replica_arn ← dev/ の secrets module output)   │
 │  [monitoring] CloudWatch Alarms / SNS                                   │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
@@ -361,8 +361,8 @@ resource "aws_secretsmanager_secret" "app" {
 **Osaka ECS の DB secret 配線**:
 - `dev/` の `modules/secrets` が `dev/app/db-connection` を作成し、ap-northeast-3 にレプリカを持つ
 - `dev/outputs.tf` に `app_secret_replica_arn` (ap-northeast-3 ARN) を追加
-- `dev-osaka/variables.tf` に `app_secret_arn` を追加
-- `dev-osaka/` の ECS module に `aurora_secret_arn = var.app_secret_arn` を渡す
+- `dev-osaka/variables.tf` に `app_secret_replica_arn` を追加
+- `dev-osaka/` の ECS module に `aurora_secret_arn = var.app_secret_replica_arn` を渡す
 - Phase 1 apply 後: secret value に Aurora Primary endpoint を書き込む
 - Aurora failover/promote 後: secret value を Osaka endpoint に更新し ECS task を再起動する (既知制約)
 
@@ -383,7 +383,7 @@ resource "aws_secretsmanager_secret" "app" {
 | 変数名 | デフォルト値 | 説明 |
 |---|---|---|
 | `global_cluster_identifier` | `""` | Phase 1 (dev apply 後) に記入 |
-| `app_secret_arn` | `""` | Phase 1 (dev apply 後) に記入 (Osaka replica ARN) |
+| `app_secret_replica_arn` | `""` | Phase 1 (dev apply 後) に記入 (Osaka replica ARN) |
 | `primary_region` | `"ap-northeast-1"` | Aurora source_region |
 | `env` | `"dev-osaka"` | リソース名プレフィックス |
 | `azs` | `["ap-northeast-3a", "ap-northeast-3b", "ap-northeast-3c"]` | 3 AZ (module バリデーション対応) |
@@ -437,7 +437,7 @@ Phase 1: envs/dev/ — aurora_global + aurora_primary + secrets のみ apply
              → secrets value に Aurora Primary endpoint を書き込む
 
 Phase 2: envs/dev-osaka/ — 全リソース apply
-  ├─ input:  global_cluster_identifier, app_secret_arn (Phase 1 の output)
+  ├─ input:  global_cluster_identifier, app_secret_replica_arn (Phase 1 の output)
   └─ output: alb_dns_name, s3_bucket_arn を記録
 
 Phase 3: envs/dev/ — CloudFront Origin Group + Route 53 + S3 CRR apply
