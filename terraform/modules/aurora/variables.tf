@@ -59,3 +59,21 @@ variable "deletion_protection" {
   type    = bool
   default = false
 }
+
+variable "is_secondary" {
+  type        = bool
+  default     = false
+  description = "true = Aurora Global DB secondary cluster (read-only, inherits credentials)"
+}
+
+variable "global_cluster_identifier" {
+  type        = string
+  default     = ""
+  description = "Aurora Global Cluster identifier. Empty = standalone cluster."
+}
+
+variable "source_region" {
+  type        = string
+  default     = ""
+  description = "Primary region for Global DB replication. Required when is_secondary = true."
+}

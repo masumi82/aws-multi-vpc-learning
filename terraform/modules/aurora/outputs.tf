@@ -27,6 +27,6 @@ output "master_username" {
 # Aurora が Secrets Manager に自動生成したシークレットの ARN
 # (ECS Execution/TaskRole から GetSecretValue で取得する)
 output "master_user_secret_arn" {
-  value       = aws_rds_cluster.this.master_user_secret[0].secret_arn
-  description = "ARN of the Secrets Manager secret managed by Aurora"
+  value       = length(aws_rds_cluster.this.master_user_secret) > 0 ? aws_rds_cluster.this.master_user_secret[0].secret_arn : null
+  description = "ARN of the Secrets Manager secret managed by Aurora (null for secondary clusters)"
 }

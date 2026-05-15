@@ -7,23 +7,22 @@ resource "aws_db_subnet_group" "this" {
 }
 
 resource "aws_rds_cluster" "this" {
-  cluster_identifier = "${var.env}-aurora-cluster"
+  cluster_identifier        = "${var.env}-aurora-cluster"
+  engine                    = "aurora-postgresql"
+  engine_mode               = "provisioned"
+  engine_version            = var.engine_version
+  global_cluster_identifier = var.global_cluster_identifier != "" ? var.global_cluster_identifier : null
+  source_region             = var.is_secondary ? var.source_region : null
 
-  engine         = "aurora-postgresql"
-  engine_mode    = "provisioned"
-  engine_version = var.engine_version
-
-  database_name   = var.database_name
-  master_username = var.master_username
-
-  # マスターパスワードは AWS が Secrets Manager 内で自動生成・管理
-  manage_master_user_password = true
+  database_name               = var.is_secondary ? null : var.database_name
+  master_username             = var.is_secondary ? null : var.master_username
+  manage_master_user_password = var.is_secondary ? null : true
 
   db_subnet_group_name   = aws_db_subnet_group.this.name
   vpc_security_group_ids = [var.aurora_sg_id]
 
   backup_retention_period = var.backup_retention_period
-  preferred_backup_window = "17:00-19:00" # UTC = JST 02:00-04:00
+  preferred_backup_window = "17:00-19:00"
 
   skip_final_snapshot = var.skip_final_snapshot
   deletion_protection = var.deletion_protection
