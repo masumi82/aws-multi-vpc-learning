@@ -25,8 +25,8 @@ resource "aws_rds_cluster" "this" {
   engine             = "aurora-postgresql"
   engine_mode        = "provisioned"
   engine_version     = var.engine_version
-  storage_encrypted = true
-  kms_key_id        = var.is_secondary ? data.aws_kms_key.rds[0].arn : null
+  storage_encrypted  = true
+  kms_key_id         = var.is_secondary ? data.aws_kms_key.rds[0].arn : null
 
   # Secondary clusters join the global cluster explicitly.
   # Primary clusters join via source_db_cluster_identifier in aurora_global;
@@ -34,7 +34,7 @@ resource "aws_rds_cluster" "this" {
   global_cluster_identifier = var.is_secondary ? (var.global_cluster_identifier != "" ? var.global_cluster_identifier : null) : null
   source_region             = var.is_secondary ? var.source_region : null
 
-  database_name   = var.is_secondary ? null : var.database_name
+  database_name = var.is_secondary ? null : var.database_name
   # Secondary clusters inherit credentials from primary via Global DB replication
   master_username = var.is_secondary ? null : var.master_username
   master_password = var.is_secondary ? null : random_password.master[0].result

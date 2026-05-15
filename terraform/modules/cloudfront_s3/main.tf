@@ -125,9 +125,9 @@ resource "aws_cloudfront_distribution" "this" {
     target_origin_id       = local.alb_target_origin_id
     viewer_protocol_policy = "redirect-to-https"
     # CloudFront origin groups do not support write methods; DR serves read-only
-    allowed_methods        = var.osaka_alb_dns != "" ? ["GET", "HEAD", "OPTIONS"] : ["GET", "HEAD", "OPTIONS", "PUT", "POST", "PATCH", "DELETE"]
-    cached_methods         = ["GET", "HEAD"]
-    compress               = false
+    allowed_methods = var.osaka_alb_dns != "" ? ["GET", "HEAD", "OPTIONS"] : ["GET", "HEAD", "OPTIONS", "PUT", "POST", "PATCH", "DELETE"]
+    cached_methods  = ["GET", "HEAD"]
+    compress        = false
 
     # Managed: CachingDisabled
     cache_policy_id = "4135ea2d-6df8-44a3-9df3-4b5a84be39ad"

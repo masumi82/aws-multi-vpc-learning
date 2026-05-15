@@ -5,8 +5,11 @@ resource "aws_secretsmanager_secret" "app" {
   description             = "Application DB connection info with cross-region replica"
   recovery_window_in_days = 0
 
-  replica {
-    region = var.replica_region
+  dynamic "replica" {
+    for_each = var.enable_replica ? [var.replica_region] : []
+    content {
+      region = replica.value
+    }
   }
 
   tags = { Name = "${var.env}-app-db-connection" }

@@ -39,6 +39,12 @@ module "aurora" {
   reader_count   = var.aurora_reader_count
 }
 
+module "secrets" {
+  source = "../../modules/secrets"
+
+  env = local.env
+}
+
 module "alb" {
   source = "../../modules/alb"
 
@@ -57,7 +63,7 @@ module "ecs" {
   app_sg_id            = module.security_groups.app_sg_id
   target_group_arn     = module.alb.target_group_arn
   ecr_repository_url   = module.ecr.repository_url
-  aurora_secret_arn    = module.aurora.master_user_secret_arn
+  aurora_secret_arn    = module.secrets.secret_arn
   aurora_endpoint      = module.aurora.cluster_endpoint
   aurora_database_name = module.aurora.database_name
   desired_count        = var.ecs_desired_count

@@ -39,7 +39,7 @@ output "aurora_reader_endpoint" {
 }
 
 output "aurora_secret_arn" {
-  value     = module.aurora.master_user_secret_arn
+  value     = module.secrets.secret_arn
   sensitive = true
 }
 

@@ -35,9 +35,9 @@ module "ecr" {
 module "aurora" {
   source = "../../modules/aurora"
 
-  env           = local.env
-  db_subnet_ids = module.network.db_subnet_ids
-  aurora_sg_id  = module.security_groups.aurora_sg_id
+  env            = local.env
+  db_subnet_ids  = module.network.db_subnet_ids
+  aurora_sg_id   = module.security_groups.aurora_sg_id
   engine_version = var.aurora_engine_version
   instance_class = var.aurora_instance_class
   reader_count   = var.aurora_reader_count
@@ -124,6 +124,7 @@ module "secrets" {
   source = "../../modules/secrets"
 
   env            = local.env
+  enable_replica = true
   replica_region = "ap-northeast-3"
 }
 
