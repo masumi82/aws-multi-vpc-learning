@@ -1,3 +1,11 @@
+# Aurora Global DB does not support manage_master_user_password; use a random
+# password instead. Standalone clusters use Secrets Manager managed passwords.
+resource "random_password" "master" {
+  count   = var.global_cluster_identifier != "" ? 1 : 0
+  length  = 32
+  special = false
+}
+
 resource "aws_db_subnet_group" "this" {
   name        = "${var.env}-aurora-subnet-group"
   description = "DB Subnet Group for ${var.env} Aurora cluster (3 AZ)"
@@ -17,7 +25,8 @@ resource "aws_rds_cluster" "this" {
 
   database_name               = var.is_secondary ? null : var.database_name
   master_username             = var.master_username
-  manage_master_user_password = true
+  master_password             = var.global_cluster_identifier != "" ? random_password.master[0].result : null
+  manage_master_user_password = var.global_cluster_identifier != "" ? null : true
 
   db_subnet_group_name   = aws_db_subnet_group.this.name
   vpc_security_group_ids = [var.aurora_sg_id]
