@@ -1,6 +1,7 @@
-# Aurora Global DB does not support manage_master_user_password on either
-# primary or secondary. All clusters use a random password.
+# Aurora Global DB does not support manage_master_user_password on any member.
+# Primary uses a random password; secondary inherits credentials from primary.
 resource "random_password" "master" {
+  count   = var.is_secondary ? 0 : 1
   length  = 32
   special = false
 }
@@ -26,9 +27,10 @@ resource "aws_rds_cluster" "this" {
   global_cluster_identifier = var.is_secondary ? (var.global_cluster_identifier != "" ? var.global_cluster_identifier : null) : null
   source_region             = var.is_secondary ? var.source_region : null
 
-  database_name  = var.is_secondary ? null : var.database_name
-  master_username = var.master_username
-  master_password = random_password.master.result
+  database_name   = var.is_secondary ? null : var.database_name
+  # Secondary clusters inherit credentials from primary via Global DB replication
+  master_username = var.is_secondary ? null : var.master_username
+  master_password = var.is_secondary ? null : random_password.master[0].result
 
   db_subnet_group_name   = aws_db_subnet_group.this.name
   vpc_security_group_ids = [var.aurora_sg_id]
