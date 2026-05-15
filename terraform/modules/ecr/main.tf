@@ -29,3 +29,18 @@ resource "aws_ecr_lifecycle_policy" "this" {
     ]
   })
 }
+
+data "aws_caller_identity" "current" {}
+
+resource "aws_ecr_replication_configuration" "this" {
+  count = var.enable_cross_region_replication ? 1 : 0
+
+  replication_configuration {
+    rule {
+      destination {
+        region      = var.replication_destination_region
+        registry_id = data.aws_caller_identity.current.account_id
+      }
+    }
+  }
+}
