@@ -16,7 +16,7 @@ resource "aws_rds_cluster" "this" {
   source_region             = var.is_secondary ? var.source_region : null
 
   database_name               = var.is_secondary ? null : var.database_name
-  master_username             = var.is_secondary ? null : var.master_username
+  master_username             = var.master_username
   manage_master_user_password = var.is_secondary ? null : true
 
   db_subnet_group_name   = aws_db_subnet_group.this.name
