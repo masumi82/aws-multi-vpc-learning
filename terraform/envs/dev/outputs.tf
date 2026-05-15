@@ -67,3 +67,19 @@ output "flow_logs_log_group" {
 output "kms_logs_key_arn" {
   value = module.monitoring.kms_key_arn
 }
+
+# ---------- Tier 3 ----------
+output "global_cluster_identifier" {
+  value       = module.aurora_global.global_cluster_identifier
+  description = "Aurora Global Cluster ID — set as global_cluster_identifier in dev-osaka/terraform.tfvars"
+}
+
+output "app_secret_replica_arn" {
+  value       = module.secrets.secret_replica_arn
+  description = "Secrets Manager replica ARN in ap-northeast-3 — set as app_secret_replica_arn in dev-osaka/terraform.tfvars"
+  sensitive   = true
+}
+
+output "route53_health_check_id" {
+  value = var.enable_route53 ? module.route53[0].health_check_id : null
+}

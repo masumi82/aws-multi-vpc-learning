@@ -24,19 +24,30 @@ module "security_groups" {
 module "ecr" {
   source = "../../modules/ecr"
 
-  env       = local.env
-  repo_name = "app"
+  env                             = local.env
+  repo_name                       = "app"
+  enable_cross_region_replication = var.enable_ecr_replication
+  replication_destination_region  = "ap-northeast-3"
+}
+
+module "aurora_global" {
+  source = "../../modules/aurora_global"
+
+  env            = local.env
+  engine_version = var.aurora_engine_version
+  database_name  = "appdb"
 }
 
 module "aurora" {
   source = "../../modules/aurora"
 
-  env            = local.env
-  db_subnet_ids  = module.network.db_subnet_ids
-  aurora_sg_id   = module.security_groups.aurora_sg_id
-  engine_version = var.aurora_engine_version
-  instance_class = var.aurora_instance_class
-  reader_count   = var.aurora_reader_count
+  env                       = local.env
+  db_subnet_ids             = module.network.db_subnet_ids
+  aurora_sg_id              = module.security_groups.aurora_sg_id
+  engine_version            = var.aurora_engine_version
+  instance_class            = var.aurora_instance_class
+  reader_count              = var.aurora_reader_count
+  global_cluster_identifier = module.aurora_global.global_cluster_identifier
 }
 
 module "alb" {
@@ -83,9 +94,11 @@ module "waf" {
 module "cloudfront_s3" {
   source = "../../modules/cloudfront_s3"
 
-  env          = local.env
-  alb_dns_name = module.alb.alb_dns_name
-  web_acl_arn  = var.enable_waf ? module.waf[0].web_acl_arn : null
+  env                 = local.env
+  alb_dns_name        = module.alb.alb_dns_name
+  web_acl_arn         = var.enable_waf ? module.waf[0].web_acl_arn : null
+  osaka_alb_dns       = var.osaka_alb_dns
+  osaka_s3_bucket_arn = var.osaka_s3_bucket_arn
 }
 
 module "monitoring" {
@@ -104,4 +117,21 @@ module "monitoring" {
   enable_guardduty = var.enable_guardduty
   enable_flow_logs = var.enable_flow_logs
   enable_kms_cmk   = var.enable_kms_cmk
+}
+
+module "secrets" {
+  source = "../../modules/secrets"
+
+  env            = local.env
+  replica_region = "ap-northeast-3"
+}
+
+module "route53" {
+  count  = var.enable_route53 ? 1 : 0
+  source = "../../modules/route53"
+
+  env               = local.env
+  cloudfront_domain = module.cloudfront_s3.cloudfront_domain_name
+  zone_id           = var.route53_zone_id
+  domain_name       = var.domain_name
 }

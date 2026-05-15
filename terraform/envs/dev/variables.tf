@@ -113,3 +113,40 @@ variable "enable_kms_cmk" {
   type    = bool
   default = false # dev は AWS managed key で十分
 }
+
+# ---------- Tier 3 Multi-Region DR ----------
+variable "osaka_alb_dns" {
+  type        = string
+  default     = ""
+  description = "Osaka ALB DNS (Phase 3: set after dev-osaka apply)"
+}
+
+variable "osaka_s3_bucket_arn" {
+  type        = string
+  default     = ""
+  description = "Osaka S3 bucket ARN for CRR (Phase 3: set after dev-osaka apply)"
+}
+
+variable "enable_ecr_replication" {
+  type        = bool
+  default     = false
+  description = "Enable ECR cross-region replication to ap-northeast-3"
+}
+
+variable "enable_route53" {
+  type        = bool
+  default     = false
+  description = "Enable Route 53 Health Check and ALIAS record (requires route53_zone_id)"
+}
+
+variable "route53_zone_id" {
+  type        = string
+  default     = ""
+  description = "Route 53 Hosted Zone ID (required when enable_route53 = true)"
+}
+
+variable "domain_name" {
+  type        = string
+  default     = "dev.example.internal"
+  description = "Domain name for Route 53 ALIAS record"
+}

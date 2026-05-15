@@ -14,3 +14,11 @@ vpc_cidr = "10.1.0.0/16"
 # ecs_desired_count     = 1
 # ecs_cpu               = 256
 # ecs_memory            = 512
+
+# ---------- Tier 3 Multi-Region DR ----------
+# Phase 1: aurora_global + secrets のみ apply してから dev-osaka に渡す
+# Phase 3: dev-osaka apply 後に以下を記入して全体を apply
+
+# osaka_alb_dns       = "<output of: terraform -chdir=terraform/envs/dev-osaka output -raw alb_dns_name>"
+# osaka_s3_bucket_arn = "<output of: terraform -chdir=terraform/envs/dev-osaka output -raw s3_bucket_arn>"
+# enable_ecr_replication = true
