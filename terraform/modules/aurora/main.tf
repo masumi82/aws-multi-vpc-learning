@@ -1,6 +1,6 @@
-# Secondary clusters cannot use manage_master_user_password; generate a random password.
+# Aurora Global DB does not support manage_master_user_password on either
+# primary or secondary. All clusters use a random password.
 resource "random_password" "master" {
-  count   = var.is_secondary ? 1 : 0
   length  = 32
   special = false
 }
@@ -21,15 +21,14 @@ resource "aws_rds_cluster" "this" {
   storage_encrypted  = true
 
   # Secondary clusters join the global cluster explicitly.
-  # For primary clusters, the global_cluster_identifier is set by AWS when
-  # aws_rds_global_cluster is created with source_db_cluster_identifier.
+  # Primary clusters join via source_db_cluster_identifier in aurora_global;
+  # AWS then sets this attribute automatically (lifecycle ignore_changes below).
   global_cluster_identifier = var.is_secondary ? (var.global_cluster_identifier != "" ? var.global_cluster_identifier : null) : null
   source_region             = var.is_secondary ? var.source_region : null
 
-  database_name               = var.is_secondary ? null : var.database_name
-  master_username             = var.master_username
-  master_password             = var.is_secondary ? random_password.master[0].result : null
-  manage_master_user_password = var.is_secondary ? null : true
+  database_name  = var.is_secondary ? null : var.database_name
+  master_username = var.master_username
+  master_password = random_password.master.result
 
   db_subnet_group_name   = aws_db_subnet_group.this.name
   vpc_security_group_ids = [var.aurora_sg_id]
@@ -45,8 +44,8 @@ resource "aws_rds_cluster" "this" {
   tags = { Name = "${var.env}-aurora-cluster" }
 
   lifecycle {
-    # When primary joins global cluster via source_db_cluster_identifier,
-    # AWS sets global_cluster_identifier automatically — don't remove it.
+    # AWS sets this automatically when primary joins global cluster via
+    # source_db_cluster_identifier — don't remove it on subsequent plans.
     ignore_changes = [global_cluster_identifier]
 
     precondition {
